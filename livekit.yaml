@@ -16,6 +16,6 @@ redis:
 
 turn:
   enabled: true
-  domain: turn.openclaw.mooo.com
+  domain: turn.probateaiagent.undo.it
   tls_port: 5349
   udp_port: 3478
