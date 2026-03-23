@@ -1,0 +1,1861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+   ______                            __
+  / ____/___  ____ ___  ____  __  __/ /____  _____
+ / /   / __ \/ __ `__ \/ __ \/ / / / __/ _ \/ ___/
+/ /___/ /_/ / / / / / / /_/ / /_/ / /_/  __/ /
+\____/\____/_/ /_/ /_/ .___/\__,_/\__/\___/_/
+                    /_/
+        Created with Perplexity Computer
+        https://www.perplexity.ai/computer
+-->
+
+<!-- Perplexity Computer Attribution — SEO Meta Tags -->
+<meta name="generator" content="Perplexity Computer">
+<meta name="author" content="Perplexity Computer">
+<meta property="og:see_also" content="https://www.perplexity.ai/computer">
+<link rel="author" href="https://www.perplexity.ai/computer">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw Voice Agents — 3D Avatar</title>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+/* ============================================
+   RESET & BASE
+   ============================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #111118;
+  --bg-card: #16161e;
+  --bg-card-hover: #1c1c28;
+  --border-color: #2a2a3a;
+  --border-glow: rgba(0, 255, 136, 0.15);
+  --text-primary: #e4e4ef;
+  --text-secondary: #8888a0;
+  --text-muted: #55556a;
+  --accent: #00ff88;
+  --danger: #ff4466;
+  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --transition: 150ms ease;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* ============================================
+   LAYOUT
+   ============================================ */
+.app-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ============================================
+   LEFT PANEL — AGENT ROSTER
+   ============================================ */
+.roster-panel {
+  width: 320px;
+  min-width: 320px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.roster-header {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.roster-header h1 {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.roster-header .subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.roster-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.roster-list::-webkit-scrollbar { width: 4px; }
+.roster-list::-webkit-scrollbar-track { background: transparent; }
+.roster-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+
+.agent-card {
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all var(--transition);
+  margin-bottom: 4px;
+  position: relative;
+}
+
+.agent-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-color);
+}
+
+.agent-card.active {
+  background: var(--bg-card);
+  border-color: var(--border-glow);
+}
+
+.agent-card .agent-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: absolute;
+  top: 18px;
+  left: 16px;
+  opacity: 0.6;
+}
+
+.agent-card.active .agent-status {
+  opacity: 1;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.agent-card .agent-info {
+  margin-left: 20px;
+}
+
+.agent-card .agent-name {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.agent-card .agent-role {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.agent-card.connected .agent-status {
+  animation: pulse-status 2s infinite;
+}
+
+@keyframes pulse-status {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ============================================
+   RIGHT PANEL — ACTIVE CONVERSATION
+   ============================================ */
+.conversation-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+/* Agent Header Bar */
+.agent-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+}
+
+.agent-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.agent-header-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.agent-header-dot.connected {
+  animation: pulse-dot 1.5s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 4px currentColor; }
+  50% { box-shadow: 0 0 16px currentColor; }
+}
+
+.agent-header-name {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.agent-header-role {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.agent-controls {
+  display: flex;
+  gap: 8px;
+}
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+.btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.btn:hover { background: var(--bg-card-hover); border-color: var(--text-muted); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-connect {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-connect:hover { background: rgba(0, 255, 136, 0.08); }
+
+.btn-disconnect {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.btn-disconnect:hover { background: rgba(255, 68, 102, 0.08); }
+
+.btn-mic {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.btn-mic.muted {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-mic.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-mic.speaking {
+  animation: mic-pulse 0.5s infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(0, 255, 136, 0); }
+}
+
+/* ============================================
+   MAIN CONTENT (3D AVATAR + TRANSCRIPT)
+   ============================================ */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.avatar-section {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 12px 24px;
+  position: relative;
+  height: 420px;
+}
+
+#avatar-container {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  position: relative;
+}
+
+#avatar-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Loading overlay for 3D model */
+.avatar-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  gap: 12px;
+  z-index: 5;
+  transition: opacity 0.5s ease;
+}
+
+.avatar-loading.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.avatar-loading .spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Empty State */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  gap: 12px;
+}
+
+.empty-state svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.3;
+}
+
+.empty-state p {
+  font-size: 14px;
+  text-align: center;
+  max-width: 300px;
+  line-height: 1.5;
+}
+
+/* ============================================
+   AUDIO VISUALIZER
+   ============================================ */
+.audio-viz {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  height: 32px;
+  padding: 8px 0;
+}
+
+.audio-viz .bar {
+  width: 3px;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: height 80ms ease;
+  min-height: 2px;
+}
+
+/* ============================================
+   TRANSCRIPT
+   ============================================ */
+.transcript-section {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-color);
+}
+
+.transcript-header {
+  padding: 12px 24px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.transcript-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 24px;
+}
+
+.transcript-log::-webkit-scrollbar { width: 4px; }
+.transcript-log::-webkit-scrollbar-track { background: transparent; }
+.transcript-log::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+
+.transcript-entry {
+  margin-bottom: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.transcript-entry .speaker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transcript-entry .timestamp {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.transcript-entry .text {
+  color: var(--text-secondary);
+  padding-left: 0;
+}
+
+.transcript-entry.agent .speaker { color: var(--accent); }
+.transcript-entry.user .speaker { color: #7c8aff; }
+
+/* ============================================
+   CONNECTION STATUS BAR
+   ============================================ */
+.status-bar {
+  padding: 8px 24px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-secondary);
+}
+
+.status-bar .status-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.status-indicator.connected { background: var(--accent); }
+.status-indicator.connecting { background: #eab308; animation: pulse-status 1s infinite; }
+.status-indicator.error { background: var(--danger); }
+
+/* ============================================
+   FOOTER
+   ============================================ */
+footer {
+  text-align: center;
+  padding: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+}
+
+footer a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+footer a:hover { color: var(--text-secondary); }
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+    overflow: auto;
+  }
+  .roster-panel {
+    width: 100%;
+    min-width: unset;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .roster-list {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px;
+    gap: 4px;
+  }
+  .agent-card {
+    min-width: 180px;
+    flex-shrink: 0;
+    margin-bottom: 0;
+  }
+  .conversation-panel {
+    height: calc(100vh - 200px);
+  }
+  .avatar-section {
+    height: 300px;
+  }
+}
+
+/* ============================================
+   NOTIFICATION TOAST
+   ============================================ */
+.toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  z-index: 1000;
+  transform: translateX(120%);
+  transition: transform 300ms ease;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.toast.show { transform: translateX(0); }
+.toast.error { border-color: var(--danger); color: var(--danger); }
+.toast.success { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <!-- LEFT: Agent Roster -->
+  <div class="roster-panel">
+    <div class="roster-header">
+      <h1>OpenClaw</h1>
+      <div class="subtitle">Voice Agent Network</div>
+    </div>
+    <div class="roster-list" id="roster-list">
+      <!-- Agent cards injected by JS -->
+    </div>
+  </div>
+
+  <!-- RIGHT: Conversation Panel -->
+  <div class="conversation-panel">
+    <div class="agent-header" id="agent-header">
+      <div class="agent-header-info">
+        <div class="agent-header-dot" id="header-dot"></div>
+        <div>
+          <div class="agent-header-name" id="header-name">Select an Agent</div>
+          <div class="agent-header-role" id="header-role">Choose from the roster to begin</div>
+        </div>
+      </div>
+      <div class="agent-controls" id="agent-controls" style="display:none;">
+        <button class="btn btn-mic" id="btn-mic" title="Toggle Microphone (Space)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <button class="btn btn-disconnect" id="btn-disconnect">Disconnect</button>
+      </div>
+      <div id="connect-controls">
+        <button class="btn btn-connect" id="btn-connect" disabled>Connect</button>
+      </div>
+    </div>
+
+    <div class="main-content" id="main-content">
+      <!-- Empty state shown initially -->
+      <div class="empty-state" id="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+        <p>Select an agent from the roster to initiate a voice session</p>
+      </div>
+
+      <!-- Active session UI (hidden initially) -->
+      <div id="session-ui" style="display:none;">
+        <div class="avatar-section">
+          <div id="avatar-container">
+            <div class="avatar-loading" id="avatar-loading">
+              <div class="spinner"></div>
+              <span>Loading 3D Avatar...</span>
+            </div>
+            <!-- Three.js canvas injected here -->
+          </div>
+        </div>
+        <div class="audio-viz" id="audio-viz">
+          <!-- Bars injected by JS -->
+        </div>
+        <div class="transcript-section">
+          <div class="transcript-header">Transcript</div>
+          <div class="transcript-log" id="transcript-log"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-left">
+        <div class="status-indicator" id="status-indicator"></div>
+        <span id="status-text">Disconnected</span>
+      </div>
+      <span id="status-room"></span>
+    </div>
+
+    <footer>
+      <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer">Created with Perplexity Computer</a>
+    </footer>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<!-- Hidden audio element for agent playback -->
+<audio id="agent-audio" autoplay></audio>
+
+<!-- ============================================
+     THREE.JS 3D AVATAR ENGINE (ES Module)
+     ============================================ -->
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+/* ============================================
+   APP STATE
+   ============================================ */
+const State = {
+  agents: [],
+  selectedAgent: null,
+  room: null,
+  connected: false,
+  connecting: false,
+  micMuted: false,
+  localTrack: null,
+  agentAudioTrack: null,
+  audioCtx: null,
+  analyser: null,
+  dataArray: null,
+  animFrame: null,
+  userSpeaking: false,
+  agentSpeaking: false,
+  lipSync: { mouthOpen: 0, mouthWidth: 0.3, volume: 0 },
+};
+
+/* ============================================
+   3D AVATAR STATE
+   ============================================ */
+const Avatar3D = {
+  scene: null,
+  camera: null,
+  renderer: null,
+  composer: null,
+  model: null,
+  mixer: null,
+  morphMeshes: [],         // meshes that have morph targets
+  morphDict: {},           // morph target name → { mesh, index }
+  clock: new THREE.Clock(),
+  pointLight: null,
+  rimLight: null,
+  ambientLight: null,
+  particleSystem: null,
+  loaded: false,
+  currentAgentId: null,
+};
+
+// Smoothed lip sync values
+let smoothMouthOpen = 0;
+let smoothMouthWidth = 0.3;
+let smoothVolume = 0;
+
+// Idle animation state
+let blinkValue = 0;
+let blinkTimer = 0;
+let nextBlinkTime = 2000 + Math.random() * 3000;
+
+// ReadyPlayer.me avatar IDs — distinct appearances for each agent
+const AGENT_AVATAR_MAP = {
+  sentinel:  '64bfa15f0e72c63d7c3934a6',
+  oracle:    '65a8dba831b23abb4f401bae',
+  phantom:   '65fa409029044c117cbd3e3c',
+  cipher:    '66039f031791600d6e5147b0',
+  aegis:     '64bfa15f0e72c63d7c3934a6',
+  nexus:     '65a8dba831b23abb4f401bae',
+  specter:   '65fa409029044c117cbd3e3c',
+  vanguard:  '66039f031791600d6e5147b0',
+};
+
+/* ============================================
+   DOM REFS
+   ============================================ */
+const $ = (sel) => document.querySelector(sel);
+const rosterList = $('#roster-list');
+const headerName = $('#header-name');
+const headerRole = $('#header-role');
+const headerDot = $('#header-dot');
+const btnConnect = $('#btn-connect');
+const btnDisconnect = $('#btn-disconnect');
+const btnMic = $('#btn-mic');
+const agentControls = $('#agent-controls');
+const connectControls = $('#connect-controls');
+const emptyState = $('#empty-state');
+const sessionUI = $('#session-ui');
+const avatarContainer = $('#avatar-container');
+const avatarLoading = $('#avatar-loading');
+const audioViz = $('#audio-viz');
+const transcriptLog = $('#transcript-log');
+const statusIndicator = $('#status-indicator');
+const statusText = $('#status-text');
+const statusRoom = $('#status-room');
+const toast = $('#toast');
+const agentAudio = $('#agent-audio');
+
+/* ============================================
+   THREE.JS SCENE SETUP
+   ============================================ */
+function initThreeScene() {
+  if (Avatar3D.renderer) return; // already initialized
+
+  const container = avatarContainer;
+  const w = container.clientWidth || 600;
+  const h = container.clientHeight || 400;
+
+  // Scene
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a0f);
+  scene.fog = new THREE.FogExp2(0x0a0a0f, 0.015);
+  Avatar3D.scene = scene;
+
+  // Camera — portrait framing for upper body
+  const camera = new THREE.PerspectiveCamera(28, w / h, 0.1, 100);
+  camera.position.set(0, 1.55, 2.2);
+  camera.lookAt(0, 1.45, 0);
+  Avatar3D.camera = camera;
+
+  // Renderer
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  container.appendChild(renderer.domElement);
+  Avatar3D.renderer = renderer;
+
+  // Post-processing
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(w, h), 0.4, 0.3, 0.9
+  );
+  composer.addPass(bloomPass);
+  Avatar3D.composer = composer;
+
+  // Lighting
+  const ambient = new THREE.AmbientLight(0x334455, 0.6);
+  scene.add(ambient);
+  Avatar3D.ambientLight = ambient;
+
+  // Key light — from above-right
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  keyLight.position.set(2, 3, 2);
+  keyLight.castShadow = false;
+  scene.add(keyLight);
+
+  // Fill light — soft from left
+  const fillLight = new THREE.DirectionalLight(0x6688cc, 0.4);
+  fillLight.position.set(-2, 1, 1);
+  scene.add(fillLight);
+
+  // Colored point light (agent-specific, updated on load)
+  const pointLight = new THREE.PointLight(0x00ff88, 1.5, 8, 2);
+  pointLight.position.set(0, 1.5, 1.5);
+  scene.add(pointLight);
+  Avatar3D.pointLight = pointLight;
+
+  // Rim light from behind
+  const rimLight = new THREE.PointLight(0x00ff88, 1.0, 6, 2);
+  rimLight.position.set(0, 2, -1.5);
+  scene.add(rimLight);
+  Avatar3D.rimLight = rimLight;
+
+  // Ground plane with agent color glow
+  const groundGeo = new THREE.CircleGeometry(1.5, 64);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x00ff88,
+    emissive: 0x00ff88,
+    emissiveIntensity: 0.1,
+    transparent: true,
+    opacity: 0.15,
+    roughness: 0.8,
+  });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = 0.01;
+  scene.add(ground);
+  Avatar3D.ground = ground;
+
+  // Floating particles
+  createParticleSystem(scene);
+
+  // Resize handler
+  const onResize = () => {
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    if (cw === 0 || ch === 0) return;
+    camera.aspect = cw / ch;
+    camera.updateProjectionMatrix();
+    renderer.setSize(cw, ch);
+    composer.setSize(cw, ch);
+  };
+  window.addEventListener('resize', onResize);
+  // Also handle flex reflow
+  new ResizeObserver(onResize).observe(container);
+}
+
+function createParticleSystem(scene) {
+  const count = 120;
+  const positions = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
+
+  for (let i = 0; i < count; i++) {
+    positions[i * 3]     = (Math.random() - 0.5) * 4;
+    positions[i * 3 + 1] = Math.random() * 3;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 4;
+    sizes[i] = Math.random() * 3 + 1;
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+  const mat = new THREE.PointsMaterial({
+    color: 0x00ff88,
+    size: 0.02,
+    transparent: true,
+    opacity: 0.4,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    sizeAttenuation: true,
+  });
+
+  const particles = new THREE.Points(geo, mat);
+  scene.add(particles);
+  Avatar3D.particleSystem = particles;
+}
+
+/* ============================================
+   LOAD 3D AVATAR MODEL
+   ============================================ */
+async function loadAvatarModel(agent) {
+  if (Avatar3D.currentAgentId === agent.id && Avatar3D.loaded) return;
+
+  Avatar3D.loaded = false;
+  Avatar3D.morphMeshes = [];
+  Avatar3D.morphDict = {};
+  avatarLoading.classList.remove('hidden');
+
+  // Remove old model
+  if (Avatar3D.model) {
+    Avatar3D.scene.remove(Avatar3D.model);
+    Avatar3D.model.traverse(child => {
+      if (child.isMesh) {
+        child.geometry?.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material?.dispose();
+        }
+      }
+    });
+    Avatar3D.model = null;
+  }
+  if (Avatar3D.mixer) {
+    Avatar3D.mixer.stopAllAction();
+    Avatar3D.mixer = null;
+  }
+
+  // Set agent colors
+  const color = new THREE.Color(agent.avatar_color);
+  Avatar3D.pointLight.color.copy(color);
+  Avatar3D.rimLight.color.copy(color);
+  if (Avatar3D.particleSystem) {
+    Avatar3D.particleSystem.material.color.copy(color);
+  }
+  if (Avatar3D.ground) {
+    Avatar3D.ground.material.color.copy(color);
+    Avatar3D.ground.material.emissive.copy(color);
+  }
+  Avatar3D.scene.background = new THREE.Color(0x0a0a0f);
+
+  // Build RPM GLB URL with morph targets
+  const avatarId = AGENT_AVATAR_MAP[agent.id] || '64bfa15f0e72c63d7c3934a6';
+  const glbUrl = `https://models.readyplayer.me/${avatarId}.glb?morphTargets=ARKit,Oculus+Visemes,mouthOpen,mouthSmile,eyesClosed,eyesLookUp,eyesLookDown&textureSizeLimit=1024&textureFormat=png`;
+
+  const loader = new GLTFLoader();
+
+  try {
+    const gltf = await new Promise((resolve, reject) => {
+      loader.load(glbUrl, resolve, undefined, reject);
+    });
+
+    const model = gltf.scene;
+    model.position.set(0, 0, 0);
+
+    // Scale to fit frame — RPM models are ~1.7m tall in meters
+    model.scale.set(1, 1, 1);
+
+    // Collect morph target meshes and build lookup dictionary
+    model.traverse(child => {
+      if (child.isMesh && child.morphTargetDictionary) {
+        Avatar3D.morphMeshes.push(child);
+        for (const [name, index] of Object.entries(child.morphTargetDictionary)) {
+          Avatar3D.morphDict[name] = { mesh: child, index };
+        }
+      }
+      // Enhance materials slightly
+      if (child.isMesh && child.material) {
+        const mat = child.material;
+        if (mat.isMeshStandardMaterial) {
+          mat.envMapIntensity = 0.5;
+          mat.needsUpdate = true;
+        }
+      }
+    });
+
+    Avatar3D.scene.add(model);
+    Avatar3D.model = model;
+    Avatar3D.currentAgentId = agent.id;
+    Avatar3D.loaded = true;
+
+    // If there are animations, set up mixer
+    if (gltf.animations && gltf.animations.length > 0) {
+      Avatar3D.mixer = new THREE.AnimationMixer(model);
+      // Play idle animation if available
+      const idleClip = gltf.animations.find(a =>
+        a.name.toLowerCase().includes('idle')
+      );
+      if (idleClip) {
+        Avatar3D.mixer.clipAction(idleClip).play();
+      }
+    }
+
+    console.log('3D Avatar loaded. Morph targets:', Object.keys(Avatar3D.morphDict));
+    avatarLoading.classList.add('hidden');
+
+  } catch (err) {
+    console.error('Failed to load 3D avatar, falling back to procedural:', err);
+    // Create a fallback procedural avatar
+    createFallbackAvatar(agent);
+    Avatar3D.currentAgentId = agent.id;
+    Avatar3D.loaded = true;
+    avatarLoading.classList.add('hidden');
+  }
+}
+
+/* ============================================
+   FALLBACK PROCEDURAL 3D AVATAR
+   ============================================ */
+function createFallbackAvatar(agent) {
+  const color = new THREE.Color(agent.avatar_color);
+  const group = new THREE.Group();
+
+  // Head — sphere with wireframe
+  const headGeo = new THREE.SphereGeometry(0.22, 32, 24);
+  const headMat = new THREE.MeshStandardMaterial({
+    color: 0x111118,
+    emissive: color,
+    emissiveIntensity: 0.15,
+    wireframe: false,
+    roughness: 0.6,
+    metalness: 0.3,
+  });
+  const head = new THREE.Mesh(headGeo, headMat);
+  head.position.y = 1.55;
+  group.add(head);
+
+  // Head wireframe overlay
+  const wireGeo = new THREE.SphereGeometry(0.225, 16, 12);
+  const wireMat = new THREE.MeshBasicMaterial({
+    color: color,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.3,
+  });
+  const wireHead = new THREE.Mesh(wireGeo, wireMat);
+  wireHead.position.y = 1.55;
+  group.add(wireHead);
+
+  // Eyes — two glowing spheres
+  const eyeGeo = new THREE.SphereGeometry(0.03, 16, 16);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: color });
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.07, 1.58, 0.19);
+  group.add(leftEye);
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.07, 1.58, 0.19);
+  group.add(rightEye);
+
+  // Mouth — torus segment
+  const mouthGeo = new THREE.TorusGeometry(0.06, 0.012, 8, 12, Math.PI);
+  const mouthMat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.6 });
+  const mouth = new THREE.Mesh(mouthGeo, mouthMat);
+  mouth.position.set(0, 1.47, 0.18);
+  mouth.rotation.x = Math.PI;
+  group.add(mouth);
+
+  // Neck
+  const neckGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.12, 16);
+  const neckMat = new THREE.MeshStandardMaterial({
+    color: 0x111118,
+    emissive: color,
+    emissiveIntensity: 0.08,
+  });
+  const neck = new THREE.Mesh(neckGeo, neckMat);
+  neck.position.y = 1.28;
+  group.add(neck);
+
+  // Torso
+  const torsoGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.5, 16);
+  const torsoMat = new THREE.MeshStandardMaterial({
+    color: 0x111118,
+    emissive: color,
+    emissiveIntensity: 0.06,
+    roughness: 0.7,
+  });
+  const torso = new THREE.Mesh(torsoGeo, torsoMat);
+  torso.position.y = 0.97;
+  group.add(torso);
+
+  // Store references for animation
+  group.userData.fallback = true;
+  group.userData.head = head;
+  group.userData.wireHead = wireHead;
+  group.userData.leftEye = leftEye;
+  group.userData.rightEye = rightEye;
+  group.userData.mouth = mouth;
+
+  Avatar3D.scene.add(group);
+  Avatar3D.model = group;
+}
+
+/* ============================================
+   SET MORPH TARGET VALUE
+   ============================================ */
+function setMorph(name, value) {
+  const entry = Avatar3D.morphDict[name];
+  if (entry) {
+    entry.mesh.morphTargetInfluences[entry.index] = value;
+  }
+}
+
+function getMorph(name) {
+  const entry = Avatar3D.morphDict[name];
+  if (entry) {
+    return entry.mesh.morphTargetInfluences[entry.index] || 0;
+  }
+  return 0;
+}
+
+/* ============================================
+   LIP SYNC: FFT → ARKit/Oculus Visemes
+   ============================================ */
+function updateLipSyncFromAudio() {
+  if (!State.analyser || !State.dataArray) {
+    // Decay when no audio
+    smoothVolume *= 0.85;
+    smoothMouthOpen *= 0.85;
+    smoothMouthWidth = smoothMouthWidth * 0.9 + 0.3 * 0.1;
+    return;
+  }
+
+  State.analyser.getByteFrequencyData(State.dataArray);
+
+  // Frequency band analysis
+  let low = 0, mid = 0, high = 0, vHigh = 0;
+  const len = State.dataArray.length; // 128 bins
+  for (let i = 0; i < 8; i++) low += State.dataArray[i];         // ~0-340 Hz
+  for (let i = 8; i < 24; i++) mid += State.dataArray[i];        // ~340-1000 Hz
+  for (let i = 24; i < 48; i++) high += State.dataArray[i];      // ~1000-2000 Hz
+  for (let i = 48; i < 80; i++) vHigh += State.dataArray[i];     // ~2000-3400 Hz
+  low /= 8;
+  mid /= 16;
+  high /= 24;
+  vHigh /= 32;
+
+  const volume = (low + mid + high + vHigh) / 4 / 255;
+  const targetMouthOpen = Math.min(volume * 3.5, 1);
+  const targetMouthWidth = 0.3 + (high / 255) * 0.5;
+
+  // Exponential smoothing
+  smoothMouthOpen = smoothMouthOpen * 0.55 + targetMouthOpen * 0.45;
+  smoothMouthWidth = smoothMouthWidth * 0.65 + targetMouthWidth * 0.35;
+  smoothVolume = smoothVolume * 0.7 + volume * 0.3;
+
+  // Map frequency bands to viseme blend shapes
+  if (Avatar3D.loaded && Object.keys(Avatar3D.morphDict).length > 0) {
+    const isSpeaking = smoothVolume > 0.02;
+    const openness = smoothMouthOpen;
+
+    if (isSpeaking) {
+      // Normalize band energies
+      const nLow = Math.min(low / 180, 1);
+      const nMid = Math.min(mid / 150, 1);
+      const nHigh = Math.min(high / 120, 1);
+      const nVHigh = Math.min(vHigh / 100, 1);
+
+      // ARKit visemes — drive based on frequency content
+      // Low frequencies → open vowels (AA, O)
+      setMorph('viseme_aa', nLow * openness * 0.9);
+      setMorph('viseme_O',  nLow * openness * 0.7);
+      setMorph('viseme_U',  nLow * (1 - nHigh) * openness * 0.4);
+
+      // Mid frequencies → front vowels and nasals
+      setMorph('viseme_E',  nMid * openness * 0.6);
+      setMorph('viseme_I',  nMid * nHigh * openness * 0.5);
+      setMorph('viseme_PP', nMid * (1 - nLow) * openness * 0.4);
+      setMorph('viseme_nn', nMid * openness * 0.3);
+
+      // High frequencies → fricatives and sibilants
+      setMorph('viseme_FF', nHigh * openness * 0.5);
+      setMorph('viseme_TH', nHigh * openness * 0.4);
+      setMorph('viseme_SS', nVHigh * openness * 0.6);
+      setMorph('viseme_CH', nVHigh * nHigh * openness * 0.4);
+
+      // Other visemes
+      setMorph('viseme_DD', nMid * nLow * openness * 0.3);
+      setMorph('viseme_kk', nMid * (1 - nHigh) * openness * 0.3);
+      setMorph('viseme_RR', nLow * nMid * openness * 0.3);
+
+      // Jaw open (ARKit)
+      setMorph('jawOpen', openness * 0.6);
+
+      // Mouth shape adjustments
+      setMorph('mouthOpen', openness * 0.7);
+      setMorph('mouthSmile', nHigh * 0.15);
+
+    } else {
+      // Silence — decay all visemes
+      const visemeNames = [
+        'viseme_aa', 'viseme_O', 'viseme_U', 'viseme_E', 'viseme_I',
+        'viseme_PP', 'viseme_FF', 'viseme_TH', 'viseme_SS', 'viseme_CH',
+        'viseme_DD', 'viseme_kk', 'viseme_nn', 'viseme_RR',
+        'jawOpen', 'mouthOpen', 'mouthSmile'
+      ];
+      for (const name of visemeNames) {
+        const current = getMorph(name);
+        if (current > 0.001) {
+          setMorph(name, current * 0.8);
+        }
+      }
+    }
+  }
+}
+
+/* ============================================
+   IDLE ANIMATIONS
+   ============================================ */
+function updateIdleAnimations(deltaMs) {
+  const t = Avatar3D.clock.elapsedTime * 1000;
+
+  // --- Blinking ---
+  blinkTimer += deltaMs;
+  if (blinkTimer >= nextBlinkTime) {
+    blinkTimer = 0;
+    nextBlinkTime = 2000 + Math.random() * 4000;
+    blinkValue = 1;
+  }
+  // Blink animation — fast close, slower open
+  if (blinkValue > 0) {
+    blinkValue = Math.max(0, blinkValue - deltaMs / 120);
+  }
+
+  if (Avatar3D.model?.userData?.fallback) {
+    // Fallback procedural avatar animations
+    const fd = Avatar3D.model.userData;
+    const breathing = Math.sin(t / 2500) * 0.003;
+    const sway = Math.sin(t / 4000) * 0.01;
+
+    if (fd.head) {
+      fd.head.position.y = 1.55 + breathing;
+      fd.head.rotation.y = sway;
+    }
+    if (fd.wireHead) {
+      fd.wireHead.position.y = 1.55 + breathing;
+      fd.wireHead.rotation.y = sway + 0.01;
+    }
+    // Eyes blink
+    if (fd.leftEye && fd.rightEye) {
+      const eyeScale = 1 - blinkValue * 0.9;
+      fd.leftEye.scale.y = eyeScale;
+      fd.rightEye.scale.y = eyeScale;
+    }
+    // Mouth — scale based on audio
+    if (fd.mouth) {
+      const mouthScale = 1 + smoothMouthOpen * 1.5;
+      fd.mouth.scale.set(1 + smoothMouthWidth, mouthScale, 1);
+      fd.mouth.material.opacity = 0.3 + smoothMouthOpen * 0.5;
+    }
+    return;
+  }
+
+  // RPM model idle animations via morph targets
+  if (!Avatar3D.loaded || Object.keys(Avatar3D.morphDict).length === 0) return;
+
+  // Blinking
+  setMorph('eyeBlinkLeft', blinkValue);
+  setMorph('eyeBlinkRight', blinkValue);
+
+  // Breathing — subtle jaw and chest movement
+  const breathCycle = Math.sin(t / 3000) * 0.5 + 0.5; // 0-1
+  // Very subtle chest-rise effect via head position
+  if (Avatar3D.model) {
+    Avatar3D.model.position.y = Math.sin(t / 3000) * 0.003;
+  }
+
+  // Head micro-movements (subtle sway)
+  if (Avatar3D.model) {
+    const headSwayX = Math.sin(t / 5000) * 0.008;
+    const headSwayY = Math.sin(t / 7000) * 0.006;
+    const headSwayZ = Math.sin(t / 6000) * 0.004;
+    Avatar3D.model.rotation.x = headSwayX;
+    Avatar3D.model.rotation.y = headSwayY;
+    Avatar3D.model.rotation.z = headSwayZ;
+  }
+
+  // Eye micro-look
+  const lookX = Math.sin(t / 4000) * 0.15;
+  const lookY = Math.sin(t / 5500) * 0.1;
+  setMorph('eyeLookUpLeft', Math.max(0, lookY));
+  setMorph('eyeLookDownLeft', Math.max(0, -lookY));
+  setMorph('eyeLookUpRight', Math.max(0, lookY));
+  setMorph('eyeLookDownRight', Math.max(0, -lookY));
+  setMorph('eyeLookInLeft', Math.max(0, lookX));
+  setMorph('eyeLookOutLeft', Math.max(0, -lookX));
+  setMorph('eyeLookInRight', Math.max(0, -lookX));
+  setMorph('eyeLookOutRight', Math.max(0, lookX));
+
+  // Subtle brow movement
+  const browVal = Math.sin(t / 8000) * 0.05;
+  setMorph('browInnerUp', Math.max(0, browVal));
+
+  // Speaking head bob — more movement when audio active
+  if (smoothVolume > 0.03 && Avatar3D.model) {
+    const speakBob = Math.sin(t / 200) * smoothVolume * 0.015;
+    const speakNod = Math.sin(t / 300) * smoothVolume * 0.01;
+    Avatar3D.model.rotation.x += speakNod;
+    Avatar3D.model.position.y += speakBob;
+  }
+}
+
+/* ============================================
+   PARTICLE ANIMATION
+   ============================================ */
+function updateParticles(deltaMs) {
+  if (!Avatar3D.particleSystem) return;
+  const positions = Avatar3D.particleSystem.geometry.attributes.position.array;
+  const count = positions.length / 3;
+  const t = Avatar3D.clock.elapsedTime;
+
+  for (let i = 0; i < count; i++) {
+    // Gentle floating upward + orbiting
+    positions[i * 3 + 1] += 0.0003 + Math.sin(t + i) * 0.0001;
+    positions[i * 3] += Math.sin(t * 0.5 + i * 0.7) * 0.0003;
+    positions[i * 3 + 2] += Math.cos(t * 0.3 + i * 0.5) * 0.0003;
+
+    // Reset if too high
+    if (positions[i * 3 + 1] > 3.5) {
+      positions[i * 3 + 1] = -0.5;
+      positions[i * 3] = (Math.random() - 0.5) * 4;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 4;
+    }
+  }
+  Avatar3D.particleSystem.geometry.attributes.position.needsUpdate = true;
+
+  // Pulse particle opacity with audio
+  const baseOpacity = 0.25 + smoothVolume * 0.5;
+  Avatar3D.particleSystem.material.opacity = baseOpacity;
+}
+
+/* ============================================
+   PER-AGENT LIGHTING EFFECTS
+   ============================================ */
+function updateAgentEffects() {
+  if (!State.selectedAgent || !Avatar3D.pointLight) return;
+
+  const t = Avatar3D.clock.elapsedTime * 1000;
+  const agentId = State.selectedAgent.id;
+
+  // Pulse intensity based on audio
+  const baseIntensity = 1.0 + smoothVolume * 3.0;
+  Avatar3D.pointLight.intensity = baseIntensity;
+  Avatar3D.rimLight.intensity = 0.6 + smoothVolume * 1.5;
+
+  // Agent-specific light behavior
+  switch (agentId) {
+    case 'sentinel':
+      // Steady scanning effect
+      Avatar3D.pointLight.position.x = Math.sin(t / 3000) * 1.5;
+      break;
+    case 'oracle':
+      // Pulsing mystic glow
+      Avatar3D.pointLight.intensity = baseIntensity + Math.sin(t / 800) * 0.5;
+      break;
+    case 'phantom':
+      // Flickering dim light
+      Avatar3D.pointLight.intensity = baseIntensity * (0.7 + Math.random() * 0.3);
+      Avatar3D.scene.fog.density = 0.025;
+      break;
+    case 'cipher':
+      // Rapid pulse — data processing feel
+      Avatar3D.pointLight.intensity = baseIntensity + Math.sin(t / 200) * 0.3;
+      break;
+    case 'aegis':
+      // Warm protective glow
+      Avatar3D.pointLight.intensity = baseIntensity * 1.2;
+      break;
+    case 'nexus':
+      // Color-shifting effect (slight hue rotate)
+      const hue = (t / 10000) % 1;
+      const shiftColor = new THREE.Color().setHSL(hue, 0.6, 0.5);
+      Avatar3D.rimLight.color.lerp(shiftColor, 0.02);
+      break;
+    case 'specter':
+      // Dark, minimal light
+      Avatar3D.pointLight.intensity = baseIntensity * 0.5;
+      Avatar3D.scene.fog.density = 0.035;
+      break;
+    case 'vanguard':
+      // Strong authoritative lighting
+      Avatar3D.pointLight.intensity = baseIntensity * 1.4;
+      break;
+    default:
+      Avatar3D.scene.fog.density = 0.015;
+  }
+}
+
+/* ============================================
+   3D RENDER LOOP
+   ============================================ */
+function animate3D() {
+  requestAnimationFrame(animate3D);
+
+  const delta = Avatar3D.clock.getDelta();
+  const deltaMs = delta * 1000;
+
+  // Update audio analysis → lip sync
+  updateLipSyncFromAudio();
+
+  // Idle animations
+  updateIdleAnimations(deltaMs);
+
+  // Particles
+  updateParticles(deltaMs);
+
+  // Agent-specific effects
+  updateAgentEffects();
+
+  // Animation mixer (if model has animations)
+  if (Avatar3D.mixer) {
+    Avatar3D.mixer.update(delta);
+  }
+
+  // Render
+  if (Avatar3D.composer) {
+    Avatar3D.composer.render();
+  }
+}
+
+/* ============================================
+   INIT
+   ============================================ */
+async function init() {
+  try {
+    const res = await fetch('/api/agents');
+    const data = await res.json();
+    State.agents = data.agents;
+    State.livekitUrl = data.livekit_url;
+    renderRoster();
+    createAudioVizBars();
+  } catch (e) {
+    showToast('Failed to load agent roster', 'error');
+    console.error(e);
+  }
+}
+
+/* ============================================
+   ROSTER RENDERING
+   ============================================ */
+function renderRoster() {
+  rosterList.innerHTML = '';
+  State.agents.forEach(agent => {
+    const card = document.createElement('div');
+    card.className = 'agent-card';
+    card.dataset.agentId = agent.id;
+    card.innerHTML = `
+      <div class="agent-status" style="background:${agent.avatar_color};color:${agent.avatar_color}"></div>
+      <div class="agent-info">
+        <div class="agent-name" style="color:${agent.avatar_color}">${agent.name}</div>
+        <div class="agent-role">${agent.role}</div>
+      </div>
+    `;
+    card.addEventListener('click', () => selectAgent(agent));
+    rosterList.appendChild(card);
+  });
+}
+
+async function selectAgent(agent) {
+  if (State.connected) return; // must disconnect first
+  State.selectedAgent = agent;
+
+  // Update roster highlight
+  document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('active'));
+  const activeCard = document.querySelector(`[data-agent-id="${agent.id}"]`);
+  if (activeCard) activeCard.classList.add('active');
+
+  // Update header
+  headerName.textContent = agent.name;
+  headerName.style.color = agent.avatar_color;
+  headerRole.textContent = agent.role;
+  headerDot.style.background = agent.avatar_color;
+  headerDot.style.color = agent.avatar_color;
+
+  // Show connect button
+  btnConnect.disabled = false;
+
+  // Show session UI
+  emptyState.style.display = 'none';
+  sessionUI.style.display = 'flex';
+  sessionUI.style.flexDirection = 'column';
+  sessionUI.style.flex = '1';
+  sessionUI.style.overflow = 'hidden';
+
+  // Initialize Three.js scene (once)
+  initThreeScene();
+
+  // Start render loop (once)
+  if (!Avatar3D._loopStarted) {
+    Avatar3D._loopStarted = true;
+    animate3D();
+  }
+
+  // Load 3D avatar for this agent
+  await loadAvatarModel(agent);
+}
+
+/* ============================================
+   CONNECTION
+   ============================================ */
+btnConnect.addEventListener('click', connect);
+btnDisconnect.addEventListener('click', disconnect);
+btnMic.addEventListener('click', toggleMic);
+
+async function connect() {
+  if (!State.selectedAgent || State.connecting) return;
+
+  State.connecting = true;
+  updateStatus('connecting', 'Connecting...');
+  btnConnect.disabled = true;
+
+  const agent = State.selectedAgent;
+  const roomName = `openclaw-${agent.id}-${Date.now().toString(36)}`;
+  const participantName = `operator-${Math.random().toString(36).slice(2, 8)}`;
+
+  try {
+    // Get token
+    const tokenRes = await fetch('/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room_name: roomName,
+        agent_name: agent.id,
+        participant_name: participantName,
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      const errData = await tokenRes.json();
+      throw new Error(errData.detail || 'Token request failed');
+    }
+
+    const { token, url } = await tokenRes.json();
+
+    // Create LiveKit room
+    const room = new LivekitClient.Room({
+      audioCaptureDefaults: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
+      adaptiveStream: true,
+      dynacast: true,
+    });
+
+    // Event handlers
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, handleTrackSubscribed);
+    room.on(LivekitClient.RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+    room.on(LivekitClient.RoomEvent.Disconnected, handleDisconnected);
+    room.on(LivekitClient.RoomEvent.DataReceived, handleDataReceived);
+    room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, handleActiveSpeakers);
+    room.on(LivekitClient.RoomEvent.TranscriptionReceived, handleTranscription);
+
+    // Connect
+    await room.connect(url || State.livekitUrl, token);
+
+    // Enable microphone
+    await room.localParticipant.setMicrophoneEnabled(true);
+
+    State.room = room;
+    State.connected = true;
+    State.connecting = false;
+    State.micMuted = false;
+    State.localTrack = room.localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
+
+    // Update UI
+    updateStatus('connected', `Connected to ${roomName}`);
+    statusRoom.textContent = roomName;
+    connectControls.style.display = 'none';
+    agentControls.style.display = 'flex';
+    btnMic.classList.remove('muted');
+    btnMic.classList.add('active');
+    headerDot.classList.add('connected');
+
+    // Mark card as connected
+    const activeCard2 = document.querySelector(`[data-agent-id="${agent.id}"]`);
+    if (activeCard2) activeCard2.classList.add('connected');
+
+    showToast(`Connected to ${agent.name}`, 'success');
+    addTranscriptEntry('system', `Session started with ${agent.name}`);
+
+  } catch (e) {
+    State.connecting = false;
+    updateStatus('error', 'Connection failed');
+    btnConnect.disabled = false;
+    showToast(e.message || 'Connection failed', 'error');
+    console.error('Connection error:', e);
+  }
+}
+
+async function disconnect() {
+  if (!State.room) return;
+
+  try {
+    await State.room.disconnect();
+  } catch (e) {
+    console.error('Disconnect error:', e);
+  }
+
+  cleanupConnection();
+}
+
+function handleDisconnected() {
+  cleanupConnection();
+  showToast('Disconnected', 'error');
+}
+
+function cleanupConnection() {
+  if (State.audioCtx) {
+    State.audioCtx.close().catch(() => {});
+    State.audioCtx = null;
+    State.analyser = null;
+    State.dataArray = null;
+  }
+
+  State.room = null;
+  State.connected = false;
+  State.connecting = false;
+  State.agentAudioTrack = null;
+  State.localTrack = null;
+  State.agentSpeaking = false;
+  State.userSpeaking = false;
+  smoothMouthOpen = 0;
+  smoothMouthWidth = 0.3;
+  smoothVolume = 0;
+
+  updateStatus('disconnected', 'Disconnected');
+  statusRoom.textContent = '';
+  connectControls.style.display = 'block';
+  agentControls.style.display = 'none';
+  btnConnect.disabled = false;
+  headerDot.classList.remove('connected');
+
+  document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('connected'));
+
+  agentAudio.srcObject = null;
+}
+
+/* ============================================
+   TRACK HANDLING
+   ============================================ */
+function handleTrackSubscribed(track, publication, participant) {
+  if (track.kind === LivekitClient.Track.Kind.Audio) {
+    State.agentAudioTrack = track;
+
+    // Attach to audio element for playback
+    const stream = new MediaStream([track.mediaStreamTrack]);
+    agentAudio.srcObject = stream;
+
+    // Setup audio analysis for lip sync
+    setupAudioAnalysis(track);
+
+    addTranscriptEntry('system', `${State.selectedAgent?.name || 'Agent'} audio connected`);
+  }
+}
+
+function handleTrackUnsubscribed(track) {
+  if (track.kind === LivekitClient.Track.Kind.Audio) {
+    State.agentAudioTrack = null;
+    State.agentSpeaking = false;
+    agentAudio.srcObject = null;
+  }
+}
+
+function setupAudioAnalysis(track) {
+  try {
+    if (State.audioCtx) {
+      State.audioCtx.close().catch(() => {});
+    }
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.6;
+
+    const stream = new MediaStream([track.mediaStreamTrack]);
+    const source = audioCtx.createMediaStreamSource(stream);
+    source.connect(analyser);
+    // Don't connect to destination — <audio> element handles playback
+
+    State.audioCtx = audioCtx;
+    State.analyser = analyser;
+    State.dataArray = new Uint8Array(analyser.frequencyBinCount);
+  } catch (e) {
+    console.error('Audio analysis setup failed:', e);
+  }
+}
+
+/* ============================================
+   DATA / TRANSCRIPTION HANDLING
+   ============================================ */
+function handleDataReceived(payload, participant, kind) {
+  try {
+    const text = new TextDecoder().decode(payload);
+    const data = JSON.parse(text);
+    if (data.type === 'transcription' || data.text) {
+      const speaker = participant?.identity?.startsWith('agent') ? 'agent' : 'user';
+      addTranscriptEntry(speaker, data.text || data.content);
+    }
+  } catch (e) {
+    // Not JSON or not transcription data
+  }
+}
+
+function handleTranscription(segments, participant) {
+  if (!segments || segments.length === 0) return;
+  
+  for (const segment of segments) {
+    const text = segment.text || segment.final || '';
+    if (!text.trim()) continue;
+    
+    const isAgent = participant?.identity !== State.room?.localParticipant?.identity;
+    const speaker = isAgent ? 'agent' : 'user';
+    const speakerName = isAgent ? (State.selectedAgent?.name || 'Agent') : 'You';
+    
+    // Check if there's an existing entry for this segment ID that we should update
+    const existingEntry = segment.id ? document.querySelector(`[data-segment-id="${segment.id}"]`) : null;
+    
+    if (existingEntry) {
+      existingEntry.querySelector('.text').textContent = text;
+    } else {
+      addTranscriptEntry(speaker, text, speakerName, segment.id);
+    }
+  }
+}
+
+function handleActiveSpeakers(speakers) {
+  State.agentSpeaking = false;
+  State.userSpeaking = false;
+  
+  speakers.forEach(speaker => {
+    if (speaker.identity === State.room?.localParticipant?.identity) {
+      State.userSpeaking = true;
+    } else {
+      State.agentSpeaking = true;
+    }
+  });
+
+  // Update mic button for user speaking
+  if (State.userSpeaking && !State.micMuted) {
+    btnMic.classList.add('speaking');
+  } else {
+    btnMic.classList.remove('speaking');
+  }
+}
+
+/* ============================================
+   MICROPHONE CONTROL
+   ============================================ */
+function toggleMic() {
+  if (!State.room || !State.connected) return;
+
+  State.micMuted = !State.micMuted;
+  State.room.localParticipant.setMicrophoneEnabled(!State.micMuted);
+
+  btnMic.classList.toggle('muted', State.micMuted);
+  btnMic.classList.toggle('active', !State.micMuted);
+}
+
+// Spacebar shortcut
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && State.connected && e.target === document.body) {
+    e.preventDefault();
+    toggleMic();
+  }
+});
+
+/* ============================================
+   STATUS & UI HELPERS
+   ============================================ */
+function updateStatus(state, text) {
+  statusIndicator.className = 'status-indicator ' + state;
+  statusText.textContent = text;
+}
+
+function showToast(message, type = '') {
+  toast.textContent = message;
+  toast.className = 'toast ' + type + ' show';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function addTranscriptEntry(type, text, speakerName, segmentId) {
+  const entry = document.createElement('div');
+  entry.className = `transcript-entry ${type}`;
+  if (segmentId) entry.dataset.segmentId = segmentId;
+
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  let label = type === 'agent' ? (speakerName || State.selectedAgent?.name || 'Agent') : type === 'user' ? (speakerName || 'You') : 'System';
+
+  entry.innerHTML = `
+    <div class="speaker">${label} <span class="timestamp">${time}</span></div>
+    <div class="text">${text}</div>
+  `;
+  transcriptLog.appendChild(entry);
+  transcriptLog.scrollTop = transcriptLog.scrollHeight;
+}
+
+/* ============================================
+   AUDIO VISUALIZER
+   ============================================ */
+const VIZ_BARS = 24;
+
+function createAudioVizBars() {
+  audioViz.innerHTML = '';
+  for (let i = 0; i < VIZ_BARS; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    bar.style.height = '2px';
+    audioViz.appendChild(bar);
+  }
+}
+
+function updateAudioViz() {
+  if (!State.analyser || !State.dataArray) return;
+
+  State.analyser.getByteFrequencyData(State.dataArray);
+  const bars = audioViz.querySelectorAll('.bar');
+  const step = Math.floor(State.dataArray.length / VIZ_BARS);
+  const agentColor = State.selectedAgent?.avatar_color || '#00ff88';
+
+  for (let i = 0; i < VIZ_BARS; i++) {
+    const value = State.dataArray[i * step] / 255;
+    const height = Math.max(2, value * 28);
+    bars[i].style.height = height + 'px';
+    bars[i].style.background = agentColor;
+    bars[i].style.opacity = 0.3 + value * 0.7;
+  }
+}
+
+// Audio viz needs its own rAF since the main 3D loop handles avatar
+function vizLoop() {
+  updateAudioViz();
+  requestAnimationFrame(vizLoop);
+}
+requestAnimationFrame(vizLoop);
+
+/* ============================================
+   BOOT
+   ============================================ */
+init();
+</script>
+</body>
+</html>
