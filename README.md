@@ -1,24 +1,36 @@
 # OpenClaw 3D Voice Agent Network
 
-8 specialized AI voice agents with Three.js 3D avatars, ARKit viseme lip sync, and LiveKit WebRTC — deployed to the cloud so your local machine stays free.
-
-![LiveKit](./.github/assets/livekit-mark.png)
+8 specialized AI voice agents with Three.js 3D avatars, ARKit viseme lip sync, and self-hosted LiveKit — deployed to Oracle Cloud for **unlimited free streaming**.
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Browser Client  │────▶│  Token Server     │────▶│  LiveKit Cloud   │
-│  (3D Avatars)    │     │  (FastAPI :8081)  │     │  (Lexi-Claw)    │
-└─────────────────┘     └──────────────────┘     └────────┬────────┘
-                                                          │
-                              ┌────────────────────────────┤
-                              ▼                            ▼
-                        ┌──────────┐              ┌──────────────┐
-                        │ 8 Voice  │──────────────▶│  OpenClaw     │
-                        │ Agents   │              │  Gateway      │
-                        └──────────┘              └──────────────┘
+┌─────────────────┐     ┌──────────┐     ┌──────────────────┐
+│  Browser Client  │────▶│  Caddy   │────▶│  Token Server     │
+│  (3D Avatars)    │     │  (SSL)   │     │  (FastAPI :8081)  │
+└─────────────────┘     └────┬─────┘     └──────────────────┘
+                             │
+                             ▼
+                      ┌──────────────┐     ┌──────────────┐
+                      │  LiveKit SFU  │────▶│    Redis      │
+                      │  (self-host)  │     │              │
+                      └──────┬───────┘     └──────────────┘
+                             │
+               ┌─────────────┼─────────────┐
+               ▼             ▼             ▼
+          ┌─────────┐  ┌─────────┐  ┌─────────┐
+          │Sentinel │  │ Oracle  │  │  ...x6  │
+          │ Agent   │  │ Agent   │  │ Agents  │
+          └─────────┘  └─────────┘  └─────────┘
+                             │
+                             ▼
+                      ┌──────────────┐
+                      │  OpenClaw    │
+                      │  Gateway     │
+                      └──────────────┘
 ```
+
+**All services run inside Docker on a single Oracle Cloud ARM64 VM (4 OCPU, 24 GB RAM) — free forever.**
 
 ## Agents
 
@@ -33,46 +45,100 @@
 | Specter | Dark Web Monitor | Puck | `#64748b` |
 | Vanguard | Mission Commander | Ara | `#dc2626` |
 
-## Quick Start (Cloud / Docker)
+## Deploy to Oracle Cloud (Free Tier)
 
-### 1. Clone & configure
+### 1. Create Oracle Cloud VM
+
+1. Sign up at [oracle.com/cloud/free](https://www.oracle.com/cloud/free/)
+2. Create a VM instance:
+   - Shape: **VM.Standard.A1.Flex** (ARM)
+   - OCPUs: **4**, Memory: **24 GB**
+   - Image: **Ubuntu 22.04** (aarch64)
+   - Add your SSH public key
+3. Note the **public IP** of your instance
+
+### 2. Configure DNS
+
+Add two A records pointing to your VM's public IP:
+
+```
+voice.yourdomain.com      → YOUR_VM_IP
+livekit.yourdomain.com    → YOUR_VM_IP
+```
+
+### 3. Open Ports in Oracle Cloud Console
+
+Go to: **VCN → Subnet → Security List → Add Ingress Rules**
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 80 | TCP | Let's Encrypt SSL |
+| 443 | TCP + UDP | HTTPS + HTTP/3 |
+| 7881 | TCP | WebRTC TCP fallback |
+| 3478 | UDP | TURN UDP |
+| 5349 | TCP | TURN TLS |
+| 50000-60000 | UDP | WebRTC media |
+
+### 4. SSH in and run setup
 
 ```bash
+ssh ubuntu@YOUR_VM_IP
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/appdevwk/Voice-Agent/openclaw-3d/setup-oracle-cloud.sh)"
+```
+
+Or manually:
+
+```bash
+ssh ubuntu@YOUR_VM_IP
 git clone https://github.com/appdevwk/Voice-Agent.git
 cd Voice-Agent
 git checkout openclaw-3d
-
-cp .env.example .env
-# Edit .env with your LiveKit credentials
+sudo bash setup-oracle-cloud.sh
 ```
 
-### 2. Deploy with Docker Compose
+The script installs Docker, configures the firewall, and prompts for your domain and credentials.
+
+### 5. Deploy
 
 ```bash
+cd ~/Voice-Agent
 docker compose up --build -d
 ```
 
-Frontend: `http://<your-server>:8081`
+Open **https://voice.yourdomain.com** — your 3D avatars are live.
 
-### 3. Management
+## Management
 
 ```bash
-# View logs
-docker compose logs -f
-
 # Status
 docker compose ps
 
-# Stop (memory persisted in Docker volume)
-docker compose down
+# Logs
+docker compose logs -f
+docker compose logs -f sentinel   # specific agent
 
 # Restart
-docker compose up -d
+docker compose restart
+
+# Stop
+docker compose down
+
+# Update
+git pull origin openclaw-3d
+docker compose up --build -d
 ```
 
-## Quick Start (Local — Install Script)
+## Local Development
 
-For local deployment (requires sufficient RAM for 8 agents):
+For local testing without SSL (not recommended for production):
+
+```bash
+cp .env.example .env
+# Edit .env — set DOMAIN=localhost, NODE_IP=127.0.0.1
+docker compose up --build -d
+```
+
+Or use the install script directly:
 
 ```bash
 chmod +x 3d-avatar-installclaw.sh
@@ -80,18 +146,16 @@ chmod +x 3d-avatar-installclaw.sh
 ./3d-avatar-installclaw.sh start
 ```
 
-See `./3d-avatar-installclaw.sh help` for all commands.
-
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `LIVEKIT_URL` | LiveKit Cloud WebSocket URL | — |
+| `DOMAIN` | Primary domain for SSL | — |
+| `ACME_EMAIL` | Email for Let's Encrypt | — |
+| `NODE_IP` | Server public IP (WebRTC ICE) | — |
 | `LIVEKIT_API_KEY` | LiveKit API key | — |
 | `LIVEKIT_API_SECRET` | LiveKit API secret | — |
 | `TOKEN_SERVER_PORT` | Frontend server port | `8081` |
-| `OPENCLAW_GATEWAY_HOST` | OpenClaw gateway host | `127.0.0.1` |
-| `OPENCLAW_GATEWAY_PORT` | OpenClaw gateway port | `18789` |
 
 ## 3D Frontend Features
 
@@ -102,12 +166,15 @@ See `./3d-avatar-installclaw.sh help` for all commands.
 - **Per-agent visual differentiation** — unique lighting, particles, and colors
 - **Mobile responsive** with touch support
 
-## Tech Stack
+## Why Self-Host?
 
-- **Frontend**: Three.js v0.162.0, Web Audio API, LiveKit Client SDK
-- **Backend**: FastAPI (Python), LiveKit Server SDK
-- **Agents**: Python LiveKit Agents with OpenClaw gateway
-- **Deployment**: Docker Compose, LiveKit Cloud (Lexi-Claw)
+| | LiveKit Cloud (Free) | Self-Hosted (Oracle Free) |
+|---|---|---|
+| Agent minutes | 1,000/month (hard cap) | **Unlimited** |
+| WebRTC minutes | 5,000/month | **Unlimited** |
+| Concurrent agents | 5 | **Unlimited** |
+| Agent deployments | 1 | **8 (all of them)** |
+| Monthly cost | $0 (with limits) | **$0 (no limits)** |
 
 ## License
 

@@ -1,0 +1,13 @@
+{
+    email {$ACME_EMAIL:admin@example.com}
+}
+
+# Main site — 3D Avatar frontend + token API
+{$DOMAIN} {
+    reverse_proxy token-server:8081
+}
+
+# LiveKit WebSocket + HTTP API (agents and browser clients connect here)
+livekit.{$DOMAIN} {
+    reverse_proxy livekit:7880
+}

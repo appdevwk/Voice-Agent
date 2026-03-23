@@ -1,13 +1,13 @@
 # ============================================
 # OpenClaw 3D Voice Agents — Docker Compose
+# Self-Hosted LiveKit on Oracle Cloud ARM64
 # ============================================
-# Cloud deployment: docker compose up --build -d
+# Prerequisites:
+#   - Copy .env.example to .env and fill in values
+#   - Point DNS A records for ${DOMAIN} and livekit.${DOMAIN} to this server
+#   - Open firewall ports: 80, 443, 7881/tcp, 50000-60000/udp
 #
-# Requires .env file with:
-#   LIVEKIT_URL=wss://lexi-claw-s7tmu0rh.livekit.cloud
-#   LIVEKIT_API_KEY=<your_key>
-#   LIVEKIT_API_SECRET=<your_secret>
-#   TOKEN_SERVER_PORT=8081
+# Deploy: docker compose up --build -d
 # ============================================
 
 x-agent-common: &agent-common
@@ -22,97 +22,177 @@ x-agent-common: &agent-common
         cpus: '0.25'
 
 services:
-  # Token server + 3D frontend
+
+  # ── Caddy: Reverse proxy + automatic Let's Encrypt SSL ──────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3 (QUIC)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - openclaw
+    env_file: .env
+
+  # ── Redis: Required by LiveKit for production clustering ─────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"     # Exposed to host so livekit can reach it
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    networks:
+      - openclaw
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── LiveKit: Self-hosted WebRTC media server ──────────────────────────────
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    ports:
+      - "7880:7880"               # HTTP API + WebSocket
+      - "7881:7881/tcp"           # WebRTC TCP fallback
+      - "50000-60000:50000-60000/udp"  # WebRTC UDP media (ICE)
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    command: --config /etc/livekit.yaml --node-ip=${NODE_IP}
+    environment:
+      - "LIVEKIT_KEYS=${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - openclaw
+
+  # ── Token Server: FastAPI backend + 3D Avatar frontend ───────────────────
   token-server:
     build:
       context: .
       dockerfile: Dockerfile.server
+    restart: unless-stopped
     ports:
-      - "${TOKEN_SERVER_PORT:-8081}:${TOKEN_SERVER_PORT:-8081}"
+      - "8081:8081"
     env_file: .env
     environment:
-      - TOKEN_SERVER_PORT=${TOKEN_SERVER_PORT:-8081}
+      - TOKEN_SERVER_PORT=8081
+      - LIVEKIT_URL=wss://livekit.${DOMAIN}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
     volumes:
       - ./agents_config.json:/app/agents_config.json:ro
       - ./static:/app/static:ro
       - openclaw-memory:/app/.memory
+    depends_on:
+      - livekit
     networks:
       - openclaw
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${TOKEN_SERVER_PORT:-8081}/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
 
+  # ── Agents ────────────────────────────────────────────────────────────────
+
   sentinel:
     <<: *agent-common
     build: ./agents/sentinel
     environment:
-      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_URL=wss://livekit.${DOMAIN}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+    depends_on:
+      - livekit
 
   oracle:
     <<: *agent-common
     build: ./agents/oracle
     environment:
-      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_URL=wss://livekit.${DOMAIN}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+    depends_on:
+      - livekit
 
   phantom:
     <<: *agent-common
     build: ./agents/phantom
     environment:
-      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_URL=wss://livekit.${DOMAIN}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+    depends_on:
+      - livekit
 
   cipher:
     <<: *agent-common
     build: ./agents/cipher
     environment:
-      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_URL=wss://livekit.${DOMAIN}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+    depends_on:
+      - livekit
 
   aegis:
     <<: *agent-common
     build: ./agents/aegis
     environment:
-      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_URL=wss://livekit.${DOMAIN}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+    depends_on:
+      - livekit
 
   nexus:
     <<: *agent-common
     build: ./agents/nexus
     environment:
-      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_URL=wss://livekit.${DOMAIN}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+    depends_on:
+      - livekit
 
   specter:
     <<: *agent-common
     build: ./agents/specter
     environment:
-      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_URL=wss://livekit.${DOMAIN}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+    depends_on:
+      - livekit
 
   vanguard:
     <<: *agent-common
     build: ./agents/vanguard
     environment:
-      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_URL=wss://livekit.${DOMAIN}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+    depends_on:
+      - livekit
 
 networks:
   openclaw:
     driver: bridge
 
 volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:
   openclaw-memory:
     driver: local
