@@ -16,6 +16,6 @@ redis:
 
 turn:
   enabled: true
-  domain: turn.YOUR_DOMAIN
+  domain: turn.openclaw.mooo.com
   tls_port: 5349
   udp_port: 3478
