@@ -1,36 +1,21 @@
-# syntax=docker/dockerfile:1
-
-ARG PYTHON_VERSION=3.12
-FROM python:${PYTHON_VERSION}-slim-bookworm AS base
+FROM python:3.12-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1
-
-FROM base AS build
-
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    python3-dev \
-    curl \
-  && rm -rf /var/lib/apt/lists/*
-
-# Install uv
-RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
 COPY pyproject.toml ./
 RUN mkdir -p src
 
-RUN uv sync
+# Extract dependencies from pyproject.toml and install with pip
+RUN pip install --no-cache-dir toml && \
+    python -c "import toml; c=toml.load('pyproject.toml'); deps=c.get('project',{}).get('dependencies',[]); print('\n'.join(deps))" > /tmp/deps.txt && \
+    pip install --no-cache-dir -r /tmp/deps.txt || \
+    pip install --no-cache-dir livekit-agents livekit-plugins-openai livekit-plugins-silero
 
 COPY . .
 
-RUN uv run "src/agent.py" download-files || true
-
-FROM base
-
-RUN pip install --no-cache-dir uv
+RUN python "src/agent.py" download-files 2>/dev/null || true
 
 ARG UID=10001
 RUN adduser \
@@ -41,10 +26,8 @@ RUN adduser \
     --uid "${UID}" \
     appuser
 
-COPY --from=build --chown=appuser:appuser /app /app
-
-WORKDIR /app
+RUN chown -R appuser:appuser /app
 
 USER appuser
 
-CMD ["uv", "run", "src/agent.py", "start"]
+CMD ["python", "src/agent.py", "start"]
